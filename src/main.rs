@@ -1,6 +1,8 @@
+use reqwasm::http::Request;
+use serde::Deserialize;
 use yew::prelude::*;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Deserialize)]
 struct Video {
     id: usize,
     title: String,
@@ -37,7 +39,7 @@ fn vides_list(VideosListProps { videos, on_click }: &VideosListProps) -> Html {
                 <p onclick={on_video_select}>{format!("{}: {}",video.speaker, video.title)}</p>
             }
         })
-        .collect::<Html>();
+        .collect();
 }
 
 #[function_component(VideoDetails)]
@@ -79,8 +81,30 @@ fn app() -> Html {
         },
     ];
 
-    let selected_video = use_state(|| None);
+    let videos = use_state(|| vec![]);
+    {
+        let videos = videos.clone();
+        use_effect_with_deps(
+            move |_| {
+                let videos = videos.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let fetched_videos: Vec<Video> = Request::get("/tutorial/data.json")
+                        .send()
+                        .await
+                        .unwrap()
+                        .json()
+                        .await
+                        .unwrap();
 
+                    videos.set(fetched_videos);
+                });
+                || ()
+            },
+            (),
+        );
+    }
+
+    let selected_video = use_state(|| None);
     let on_video_select = {
         let selected_video = selected_video.clone();
         Callback::from(move |video: Video| selected_video.set(Some(video)))
@@ -97,7 +121,7 @@ fn app() -> Html {
             <h1>{ "RustConf Explorer" }</h1>
             <div>
                 <h3>{"Videos to watch"}</h3>
-                <VideosList videos={videos} on_click={on_video_select.clone()} />
+                <VideosList videos={(*videos).clone()} on_click={on_video_select.clone()} />
             </div>
             { for details }
             <div>
